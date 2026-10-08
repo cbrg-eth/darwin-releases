@@ -1,0 +1,258 @@
+#
+#	EarlyAbort - maximization in a space of k-dimensional solutions out
+#	of a n-dimensional space
+#
+#	f( k-dim-permutation ) is the objective function.  It must return a
+#	list where the first value is the optimization objective, to be
+#	maximized.  The rest of the elements of the list are not inspected.
+#
+#	EarlyAbort returns a list with 3 components: [f(best), dim, best],
+#	where best is a k-dimensional vector of posint.
+#
+#	f(inds) --> [ numeric (functional to be maximized), anything* ]
+#
+#	Original version - no weighting of replacement based on previous gains
+#
+#	Gaston H. Gonnet (Thu Jan 14 09:54:55 CET 2016)
+#
+################################################################################
+
+
+################################################################################
+#
+#	Identical to EarlyAbort but allows dimensions to be repeated
+#
+#	Gaston H. Gonnet (Tue Feb 23 17:57:33 UYT 2016)
+#
+################################################################################
+EarlyAbortR := proc(
+	f : procedure,
+	k : posint,
+	n : posint ;
+	(lim=DBL_MAX) : numeric,
+	guess : list(posint) )
+global BestSolution, Iters;
+
+
+assert( k <= n );
+if k = n then
+     inds := [seq(i,i=1..k)];
+     return( [f(inds),k,inds] )
+elif type(guess,list(posint)) then
+     if length(guess) >= k then inds := guess[1..k]
+     else oth := Shuffle( {seq(i,i=1..n)} minus {op(guess)} );
+	  inds := [ op(guess), op( 1..k-length(guess), oth )]
+     fi;
+else inds := [op(RandomIntegers(n,k))] fi:
+best := [[-DBL_MAX]];
+
+if k=1 then # specialize for 1 dimension
+    for i to n do
+	x := f( [i] );
+	if x[1] > best[1,1] then
+	    best := [x,k,[i]];
+	    if printlevel > 3 then dprint(best) fi;
+	    if lim-x[1] <= 100*DBL_EPSILON*(|x[1]|+|lim|) then i := i+1;  break fi;
+	fi;
+    od;
+    Iters := [k,[i-1]];
+    BestSolution := best;
+    return( best );
+fi;
+################################################################################
+
+kn := k * If( type(EarlyAbortMaxn,posint), min(n,EarlyAbortMaxn), n);
+Iters := [];  it := 0;
+
+all := {seq(i,i=1..n)};
+for i to kn do
+    if i=1 then
+	chang := [1];
+	for j from 2 to k do if inds[j] <> inds[j-1] then
+	    chang := append(chang,j) fi od;
+	pairs := Shuffle([seq(seq(iout=iin,iin=all),iout=chang)]) fi:
+    if i > length(pairs) then break fi;
+    if inds[pairs[i,1]] = pairs[i,2] then next fi;
+    inds2 := copy(inds);
+    inds2[pairs[i,1]] := pairs[i,2];
+    if EarlyAbortNoSort <> true then
+	inds2 := sort(inds2);
+    fi;
+    x := f( inds2 );
+    if x[1] > best[1,1] then
+        inds := inds2;
+        best := [x,k,inds];
+	if printlevel > 3 then dprint(best) fi;
+	if lim-x[1] <= 100*DBL_EPSILON*(|x[1]|+|lim|) then i := i+1;  break fi;
+	Iters := append(Iters,i);
+	i := 0;
+    fi;
+
+    it := it+1;
+    if printlevel > 3 and mod(it,1000) = 0 then
+	lprint( sprintf( 'EarlyAbortR iterations: %d/%d', i, k*n),
+		If( length(Iters) > 10, Iters[-10..-1], Iters), sum(Iters)+i ) fi;
+od:
+Iters := [k,append(Iters,i-1)];
+BestSolution := best;
+end:
+
+
+################################################################################
+#
+#	Weighting of replacements based on previous functional increases.
+#	This code had problems and did not show to be better.  removed
+#
+#	Gaston H. Gonnet (Thu Jan 14 09:54:55 CET 2016)
+#	weighted version (Fri Sep  2 13:16:38 CEST 2016)
+#	Weights fixed and efficiency improvements (Sun Dec 15 12:07:21 CET 2019)
+#
+################################################################################
+EarlyAbort := proc(
+	f : procedure,
+	k : posint,
+	n : posint ;
+	(lim=DBL_MAX) : numeric,
+	guess : list(posint) )
+global BestSolution, Iters;
+
+
+assert( k <= n );
+if k = n then
+     inds := [seq(i,i=1..k)];
+     return( [f(inds),k,inds] )
+fi;
+knk0 := k*(n-k);
+knk := min( knk0, If( type(EarlyAbortMaxn,posint), k*EarlyAbortMaxn, NULL) );
+if type(guess,list(posint)) then
+     if length(guess) >= k then inds := guess[1..k]
+     else oth := Shuffle( {seq(i,i=1..n)} minus {op(guess)} );
+	  inds := [ op(guess), op( 1..k-length(guess), oth )]
+     fi;
+else inds := [op(RandomIntegers(n,k))] fi:
+best := [[-DBL_MAX]];
+################################################################################
+
+if k=1 then # specialize for 1 dimension
+    for i to n do
+	x := f( [i] );
+	if x[1] > best[1,1] then
+	    best := [x,k,[i]];
+	    if printlevel > 3 then dprint(best) fi;
+	    if lim-x[1] <= 100*DBL_EPSILON*(|x[1]|+|lim|) then i := i+1;  break fi;
+	fi;
+    od;
+    Iters := [k,[i-1]];
+    BestSolution := best;
+    return( best );
+fi;
+################################################################################
+
+Iters := [];  it := 0;
+pairs := CreateArray(1..knk0):	# Do Shuffle directly for very large n
+
+if n <= 3000 then	# there is strong evidence from Kaggle_test that improv
+			# is better in terms of reducing f calls
+################################################################################
+  improv := CreateArray(1..n,1..2);
+  for i to knk do
+    if i=1 then
+	for j to n do improv[j,1] := improv[j,2] := 0 od;
+	st0 := st1 := 0;
+	notin := {seq(i,i=1..n)} minus {op(inds)};
+	for iout to k do for iin to n-k do
+	    pairs[ iout + k*(iin-1)] := iout + 1000*notin[iin] od od:
+    fi:
+
+    # select a good pair
+    goodp := [-DBL_MAX,pairs[i],i];
+    stm := If( st0 < 1, 0, st1/st0 );
+    to min(knk-i,10) do
+	j := i + ceil( Rand() * (knk0-i) );
+	v1 := improv[inds[mod(pairs[j],1000)]];
+	v2 := improv[floor(pairs[j]/1000)];
+	if v2[1]=0 then goodp := [0,pairs[j],j];  break fi; # favour not yet seen
+	#v := If( v2[1]=0, stm, v2[2]/v2[1] ) - If( v1[1]=0, stm, v1[2]/v1[1] );	# this was terrible
+	v := If( v2[1]=0, stm, v2[2]/v2[1] ) + If( v1[1]=0, stm, v1[2]/v1[1] );
+	#v := If( v2[1]=0, stm, v2[2]/v2[1] );
+	if v > goodp[1] then goodp := [v,pairs[j],j] fi;
+    od;
+
+    pairs[goodp[3]] := pairs[i];
+    iout := inds[mod(goodp[2],1000)];
+    iin := floor(goodp[2]/1000);
+
+    inds2 := copy(inds);
+    inds2[mod(goodp[2],1000)] := iin;
+    if EarlyAbortNoSort <> true then inds2 := sort(inds2) fi;
+    x := f( inds2 );
+
+    improv[iout,1] := improv[iout,1]+1;  improv[iout,2] := improv[iout,2]+x[1];
+    improv[iin,1] := improv[iin,1]+1;  improv[iin,2] := improv[iin,2]+x[1];
+    st0 := st0 + 1;  st1 := st1 + x[1];
+
+    if x[1] > best[1,1] then
+        inds := inds2;
+        best := [x,k,inds];
+	if printlevel > 3 then dprint( best, sprintf( '%d -> %d',iout,iin) ) fi;
+	if lim-x[1] <= 100*DBL_EPSILON*(|x[1]|+|lim|) then i := i+1;  break
+	elif type(EarlyAbort_goal,numeric) and x[1] > EarlyAbort_goal then
+	     if printlevel > 3 then
+		lprint( 'EarlyAbort reached goal:', EarlyAbort_goal ) fi;
+	     break fi;
+	Iters := append(Iters,i);
+	i := 0;
+    fi;
+
+    it := it+1;
+    if printlevel > 3 and mod(it,1000) = 0 then
+	lprint( sprintf( 'EarlyAbort iterations: %d/%d', i, knk),
+		If( length(Iters) > 10, Iters[-10..-1], Iters), sum(Iters)+i ) fi;
+  od:
+################################################################################
+
+else
+  for i to knk do
+    if i=1 then
+	notin := {seq(i,i=1..n)} minus {op(inds)};
+	for iout to k do for iin to n-k do
+	    pairs[ iout + k*(iin-1)] := iout + 1000*notin[iin] od od:
+    fi:
+
+    # select a pair
+    j := i + ceil( Rand() * (knk0-i) );
+    pj := pairs[j];  pairs[j] := pairs[i]; # Shuffle
+    iout := inds[mod(pj,1000)];
+    iin := floor(pj/1000);
+
+    inds2 := copy(inds);
+    inds2[mod(pj,1000)] := iin;
+    if EarlyAbortNoSort <> true then inds2 := sort(inds2) fi;
+    x := f( inds2 );
+
+    if x[1] > best[1,1] then
+        inds := inds2;
+        best := [x,k,inds];
+	if printlevel > 3 then dprint( best, sprintf( '%d -> %d',iout,iin) ) fi;
+	if lim-x[1] <= 100*DBL_EPSILON*(|x[1]|+|lim|) then i := i+1;  break
+	elif type(EarlyAbort_goal,numeric) and x[1] > EarlyAbort_goal then
+	     if printlevel > 3 then
+		lprint( 'EarlyAbort reached goal:', EarlyAbort_goal ) fi;
+	     break fi;
+	Iters := append(Iters,i);
+	i := 0;
+    fi;
+
+    it := it+1;
+    if printlevel > 3 and mod(it,1000) = 0 then
+	lprint( sprintf( 'EarlyAbort iterations: %d/%d', i, knk),
+		If( length(Iters) > 10, Iters[-10..-1], Iters), sum(Iters)+i ) fi;
+  od:
+################################################################################
+fi:
+
+Iters := [k,append(Iters,i-1)];
+if printlevel > 3 then lprint('EarlyAbort best solution:', best ) fi;
+BestSolution := best;
+end:
+################################################################################
