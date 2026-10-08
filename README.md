@@ -5,8 +5,11 @@ bioinformatics: sequence alignment, phylogenetic trees, protein databases and
 more. Darwin is developed by the Computational Biochemistry Research Group at
 ETH Zurich.
 
-This repository only hosts the release downloads. See
-[Releases](https://github.com/cbrg-eth/darwin-releases/releases) for the files.
+This repository hosts the release downloads and the source of the Darwin
+library. See [Releases](https://github.com/cbrg-eth/darwin-releases/releases)
+for the downloads, and [`lib/`](lib) for the library code of the latest
+release. The library of a specific release is under its tag, for example
+`https://github.com/cbrg-eth/darwin-releases/tree/v1.2.3/lib`.
 
 ## Supported platforms
 
@@ -130,7 +133,8 @@ is always the newest tagged version.
 
 Please open an issue in this repository. Include the release version, your
 operating system and CPU (`uname -sm`), and a small script that reproduces the
-problem.
+problem. If the problem is in a library function, a link to the relevant lines
+in [`lib/`](lib) helps a lot.
 
 ## Citing Darwin
 
