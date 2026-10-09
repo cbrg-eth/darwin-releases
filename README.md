@@ -17,11 +17,14 @@ release. The library of a specific release is under its tag, for example
 |---|---|---|
 | Linux x86_64 | `darwin-linux` | glibc 2.28 or newer |
 | Linux arm64 (aarch64) | `darwin-linux-arm64` | glibc 2.28 or newer |
-| macOS, Apple Silicon | `darwin-macos` | macOS 11 (Big Sur) or newer |
+| macOS, Apple Silicon and Intel | `darwin-macos` | macOS 11 (Big Sur) or newer |
 
 glibc 2.28 or newer covers RHEL/Rocky/Alma 8, Debian 10 and Ubuntu 20.04, and
-any later release of these distributions. Intel Macs are not supported; use
-the Docker image instead.
+any later release of these distributions.
+
+`darwin-macos` is a universal binary that runs natively on both Apple Silicon
+and Intel Macs. Releases up to v2026.10.08 contain an Apple Silicon-only
+binary; on an Intel Mac, use a newer release or the Docker image.
 
 ## Installation
 
